@@ -476,7 +476,8 @@
         }
 
         async function analyzeWithGemini(text, imageBase64) {
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+            // Use the gemini-2.5-flash model which is the current stable multimodal model
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
             
             const promptText = text 
                 ? `Analisis klaim atau konten berikut dan tentukan kebenarannya secara objektif berdasarkan informasi paling mutakhir saat ini. \n\nKlaim/Teks: "${text}"`
@@ -496,37 +497,25 @@
             const payload = {
                 contents: [{ parts: parts }],
                 systemInstruction: {
-                    parts: [{ text: "Kamu adalah 'VeritasLens', sistem analis kebenaran konten (teks dan visual) berbahasa Indonesia yang cerdas dan akurat. Gunakan pengetahuanmu dan fitur pencarian internet (Google Search) untuk memverifikasi klaim atau informasi dalam teks dan/atau gambar yang diberikan dengan data paling baru (termasuk tahun 2026 ke atas). Klasifikasikan sebagai BENAR, HOAKS, atau MENYESATKAN. Analisis juga elemen visual jika ada gambar (misal: tanda-tanda editan, konteks gambar asli). Berikan alasan logis berdasarkan fakta nyata, dan berikan tautan URL referensi yang valid dari hasil pencarianmu." }]
+                    parts: [{ 
+                        text: `Kamu adalah 'VeritasLens', sistem analis kebenaran konten (teks dan visual) berbahasa Indonesia yang cerdas dan akurat. Gunakan pengetahuanmu dan fitur pencarian internet (Google Search) untuk memverifikasi klaim dengan data paling mutakhir.
+
+Kamu WAJIB mengembalikan jawaban HANYA berupa objek JSON mentah (tanpa blockquote markdown seperti \`\`\`json) dengan struktur yang persis seperti ini:
+{
+  "verdict": "BENAR" atau "HOAKS" atau "MENYESATKAN",
+  "score": <angka kepercayaan 0-100>,
+  "summary": "<2-3 kalimat penjelasan ringkas mengapa dinilai demikian>",
+  "points": ["<poin bukti 1>", "<poin bukti 2>", "<poin bukti 3>"],
+  "sources": [
+    { "title": "<judul berita/sumber>", "url": "<tautan URL asli>" }
+  ]
+}
+
+Beri referensi dari pencarian internet yang valid. DILARANG menambahkan teks lain di luar format JSON tersebut.` 
+                    }]
                 },
-                tools: [{ "google_search": {} }], // Mengaktifkan pencarian internet real-time (Search Grounding)
-                generationConfig: {
-                    responseMimeType: "application/json",
-                    responseSchema: {
-                        type: "OBJECT",
-                        properties: {
-                            verdict: { type: "STRING", enum: ["BENAR", "HOAKS", "MENYESATKAN"] },
-                            score: { type: "INTEGER", description: "Skor kepercayaan AI dari 0 hingga 100" },
-                            summary: { type: "STRING", description: "Ringkasan penjelasan singkat 2-3 kalimat mengapa konten tersebut dinilai demikian. Jika ada gambar, sebutkan juga analisis visualnya." },
-                            points: { 
-                                type: "ARRAY", 
-                                items: { type: "STRING" }, 
-                                description: "3 hingga 5 poin argumen, bukti, analisis visual (jika ada gambar), atau alasan utama" 
-                            },
-                            sources: {
-                                type: "ARRAY",
-                                items: {
-                                    type: "OBJECT",
-                                    properties: {
-                                        title: { type: "STRING", description: "Judul artikel, rilis media, atau sumber referensi" },
-                                        url: { type: "STRING", description: "Tautan URL referensi. Jika tidak ada gunakan '#'" }
-                                    }
-                                },
-                                description: "Daftar 3 sumber referensi terkait"
-                            }
-                        },
-                        required: ["verdict", "score", "summary", "points", "sources"]
-                    }
-                }
+                tools: [{ "googleSearch": {} }] // Menggunakan search grounding
+                // generationConfig (JSON Mode) dihapus karena tidak didukung bersama tools
             };
 
             const result = await fetchWithRetry(url, {
@@ -535,8 +524,11 @@
                 body: JSON.stringify(payload)
             });
 
-            const rawText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+            let rawText = result.candidates?.[0]?.content?.parts?.[0]?.text;
             if (!rawText) throw new Error("Format respons tidak valid dari API Gemini");
+            
+            // Sanitasi teks dari blok markdown (jika AI masih membalas pakai backticks)
+            rawText = rawText.replace(/```json/gi, '').replace(/```/gi, '').trim();
             
             return JSON.parse(rawText);
         }
