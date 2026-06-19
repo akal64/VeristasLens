@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VeritasLens - Analisis Kebenaran Berbasis AI</title>
+    <!-- Tailwind CSS untuk Styling Cepat & Modern -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            dark: '#0f172a', // Slate 900
+                            primary: '#1e3a8a', // Blue 900
+                            light: '#eff6ff', // Blue 50
+                            accent: '#3b82f6', // Blue 500
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        /* Spinner Animation */
+        .loader {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top: 4px solid #3b82f6;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Toast notification */
+        #toast {
+            transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
+            transform: translateY(100%);
+            opacity: 0;
+        }
+        #toast.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans flex flex-col min-h-screen">
+
+    <!-- Header -->
+    <header class="bg-brand-primary text-white shadow-lg sticky top-0 z-50">
+        <div class="max-w-6xl mx-auto px-4 py-4 sm:py-6 flex flex-col sm:flex-row items-center justify-between">
+            <div class="flex items-center gap-3 mb-2 sm:mb-0">
+                <i data-lucide="shield-check" class="w-8 h-8 text-blue-300"></i>
+                <h1 class="text-2xl sm:text-3xl font-bold tracking-tight">VeritasLens</h1>
+            </div>
+            <p class="text-blue-200 text-sm sm:text-base font-medium">Lensa kejujuran di era informasi.</p>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-grow max-w-6xl mx-auto px-4 py-8 w-full flex flex-col lg:flex-row gap-8">
+        
+        <!-- Left/Top Column: Input & Results -->
+        <div class="lg:w-2/3 space-y-6">
+            
+            <!-- Input Area -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-8">
+                <h2 class="text-xl font-semibold mb-4 text-brand-dark flex items-center gap-2">
+                    <i data-lucide="file-search" class="w-5 h-5 text-brand-accent"></i>
+                    Analisis Konten (Teks & Gambar)
+                </h2>
+                
+                <!-- Text Input -->
+                <textarea id="claimInput" rows="4" 
+                    class="w-full bg-slate-50 border border-slate-300 rounded-xl p-4 focus:ring-2 focus:ring-brand-accent focus:border-brand-accent transition-all resize-none text-base placeholder-slate-400 mb-4"
+                    placeholder="Ketik klaim atau paste teks berita di sini..."></textarea>
+                
+                <!-- Image Input & Preview -->
+                <div class="mb-4">
+                    <input type="file" id="imageInput" accept="image/*" class="hidden">
+                    <div id="imageDropZone" class="border-2 border-dashed border-slate-300 rounded-xl p-6 text-center cursor-pointer hover:border-brand-accent hover:bg-brand-light transition-all flex flex-col items-center justify-center gap-2" onclick="document.getElementById('imageInput').click()">
+                        <i data-lucide="image-plus" class="w-8 h-8 text-slate-400"></i>
+                        <p class="text-sm text-slate-600 font-medium">Klik untuk unggah screenshot/gambar (opsional)</p>
+                        <p class="text-xs text-slate-400">JPG, PNG, WebP (Maks. 5MB)</p>
+                    </div>
+                    
+                    <!-- Image Preview Container -->
+                    <div id="imagePreviewContainer" class="hidden relative mt-4 rounded-xl overflow-hidden border border-slate-200 bg-slate-50 max-h-[300px] flex items-center justify-center">
+                        <button onclick="clearImage()" class="absolute top-2 right-2 bg-slate-800 bg-opacity-70 text-white p-1.5 rounded-full hover:bg-opacity-100 transition-all z-10" title="Hapus Gambar">
+                            <i data-lucide="x" class="w-4 h-4"></i>
+                        </button>
+                        <img id="imagePreview" src="" alt="Preview" class="object-contain h-full w-full">
+                    </div>
+                </div>
+
+                <div class="mt-6 flex flex-col sm:flex-row gap-3 justify-end">
+                    <button onclick="resetApp()" class="px-5 py-2.5 rounded-xl font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors flex items-center justify-center gap-2">
+                        <i data-lucide="rotate-ccw" class="w-4 h-4"></i> Bersihkan
+                    </button>
+                    <button onclick="processFactCheck()" id="checkBtn" class="px-6 py-2.5 rounded-xl font-semibold text-white bg-brand-primary hover:bg-blue-800 transition-colors shadow-md hover:shadow-lg flex items-center justify-center gap-2 w-full sm:w-auto">
+                        <i data-lucide="search" class="w-4 h-4"></i> Analisis Sekarang
+                    </button>
+                </div>
+            </div>
+
+            <!-- Loading State -->
+            <div id="loadingState" class="hidden bg-white rounded-2xl shadow-sm border border-slate-200 p-12 flex flex-col items-center justify-center text-center">
+                <div class="loader mb-4"></div>
+                <h3 class="text-lg font-semibold text-brand-dark">AI Sedang Menganalisis...</h3>
+                <p class="text-slate-500 text-sm mt-2 max-w-md">Mencari referensi silang, menganalisis struktur bahasa, dan memeriksa database fakta terverifikasi secara real-time.</p>
+            </div>
+
+            <!-- Result Area -->
+            <div id="resultState" class="hidden space-y-6">
+                <div class="bg-white rounded-2xl shadow-md border border-slate-200 overflow-hidden">
+                    
+                    <!-- Verdict Header -->
+                    <div id="verdictHeader" class="p-6 text-center border-b border-slate-100 flex flex-col items-center justify-center">
+                        <div id="verdictBadge" class="inline-flex items-center gap-2 px-6 py-2 rounded-full text-lg font-bold uppercase tracking-wider mb-4 shadow-sm">
+                            <!-- Injected by JS -->
+                        </div>
+                        <p id="verdictSummary" class="text-slate-700 leading-relaxed max-w-2xl text-center font-medium">
+                            <!-- Injected by JS -->
+                        </p>
+                    </div>
+
+                    <div class="p-6 sm:p-8 grid md:grid-cols-2 gap-8">
+                        <!-- Left Info -->
+                        <div class="space-y-6">
+                            <!-- Confidence Score -->
+                            <div>
+                                <div class="flex justify-between items-end mb-2">
+                                    <h4 class="font-semibold text-slate-800 text-sm uppercase tracking-wide">Skor Kepercayaan AI</h4>
+                                    <span id="scoreText" class="font-bold text-brand-primary text-xl">0%</span>
+                                </div>
+                                <div class="w-full bg-slate-200 rounded-full h-3">
+                                    <div id="scoreBar" class="bg-brand-primary h-3 rounded-full transition-all duration-1000 ease-out" style="width: 0%"></div>
+                                </div>
+                                <p class="text-xs text-slate-500 mt-2">Berdasarkan analisis semantik, visual, dan pencocokan pola data.</p>
+                            </div>
+
+                            <!-- Key Points -->
+                            <div>
+                                <h4 class="font-semibold text-slate-800 text-sm uppercase tracking-wide mb-3 flex items-center gap-2">
+                                    <i data-lucide="list-checks" class="w-4 h-4"></i> Alasan Utama
+                                </h4>
+                                <ul id="keyPointsList" class="space-y-2 text-sm text-slate-700">
+                                    <!-- Injected by JS -->
+                                </ul>
+                            </div>
+                        </div>
+
+                        <!-- Right Info: Sources & Actions -->
+                        <div class="space-y-6 md:border-l md:border-slate-100 md:pl-8">
+                            <div>
+                                <h4 class="font-semibold text-slate-800 text-sm uppercase tracking-wide mb-3 flex items-center gap-2">
+                                    <i data-lucide="link" class="w-4 h-4"></i> Sumber Referensi
+                                </h4>
+                                <ul id="sourcesList" class="space-y-3">
+                                    <!-- Injected by JS -->
+                                </ul>
+                            </div>
+
+                            <div class="pt-4 mt-4 border-t border-slate-100">
+                                <button onclick="shareResult()" class="w-full py-3 rounded-xl font-medium border-2 border-brand-primary text-brand-primary hover:bg-brand-light transition-colors flex items-center justify-center gap-2">
+                                    <i data-lucide="share-2" class="w-4 h-4"></i> Salin Ringkasan (Bagikan)
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Right/Sidebar Column: History -->
+        <div class="lg:w-1/3">
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sticky top-28">
+                <h3 class="text-lg font-bold text-brand-dark mb-4 flex items-center justify-between border-b pb-3">
+                    <span class="flex items-center gap-2"><i data-lucide="history" class="w-5 h-5"></i> Riwayat Analisis</span>
+                    <button onclick="clearHistory()" class="text-xs text-red-500 hover:text-red-700 underline">Hapus</button>
+                </h3>
+                <div id="historyContainer" class="space-y-4 max-h-[400px] overflow-y-auto pr-2">
+                    <!-- History items injected by JS -->
+                    <p id="emptyHistoryMsg" class="text-sm text-slate-500 text-center italic py-4">Belum ada riwayat analisis.</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Trending Section -->
+    <section class="bg-white border-t border-slate-200 py-12 mt-8">
+        <div class="max-w-6xl mx-auto px-4">
+            <div class="flex items-center gap-2 mb-8">
+                <i data-lucide="trending-up" class="w-6 h-6 text-red-500"></i>
+                <h2 class="text-2xl font-bold text-brand-dark">Trending Misinformasi Hari Ini</h2>
+            </div>
+            
+            <div class="grid md:grid-cols-3 gap-6">
+                <!-- Card 1 -->
+                <div class="bg-slate-50 rounded-xl border border-slate-200 p-5 hover:shadow-md transition-shadow cursor-pointer" onclick="loadExample('Pemerintah akan memblokir WhatsApp mulai bulan depan karena masalah keamanan privasi pengguna.')">
+                    <div class="inline-block px-3 py-1 rounded-full text-xs font-bold bg-red-100 text-red-700 mb-3 uppercase tracking-wide">Hoaks</div>
+                    <h3 class="font-semibold text-slate-800 line-clamp-2 mb-2">Pemerintah akan memblokir WhatsApp mulai bulan depan.</h3>
+                    <p class="text-sm text-slate-500 line-clamp-3">Pesan berantai yang mengklaim pemblokiran aplikasi chat populer tanpa dasar yang jelas dari kementerian terkait.</p>
+                </div>
+                <!-- Card 2 -->
+                <div class="bg-slate-50 rounded-xl border border-slate-200 p-5 hover:shadow-md transition-shadow cursor-pointer" onclick="loadExample('Ditemukan obat herbal daun singkong yang dapat menyembuhkan penyakit kanker stadium akhir dalam 3 hari.')">
+                    <div class="inline-block px-3 py-1 rounded-full text-xs font-bold bg-yellow-100 text-yellow-700 mb-3 uppercase tracking-wide">Menyesatkan</div>
+                    <h3 class="font-semibold text-slate-800 line-clamp-2 mb-2">Obat herbal daun singkong sembuhkan kanker dalam 3 hari.</h3>
+                    <p class="text-sm text-slate-500 line-clamp-3">Klaim medis berlebihan yang belum memiliki bukti uji klinis valid dan berpotensi membahayakan pasien.</p>
+                </div>
+                <!-- Card 3 -->
+                <div class="bg-slate-50 rounded-xl border border-slate-200 p-5 hover:shadow-md transition-shadow cursor-pointer" onclick="loadExample('BMKG resmi mengeluarkan peringatan dini tsunami untuk wilayah pesisir selatan Jawa akibat gempa magnitudo 6.5.')">
+                    <div class="inline-block px-3 py-1 rounded-full text-xs font-bold bg-green-100 text-green-700 mb-3 uppercase tracking-wide">Benar</div>
+                    <h3 class="font-semibold text-slate-800 line-clamp-2 mb-2">BMKG keluarkan peringatan dini tsunami pesisir selatan Jawa.</h3>
+                    <p class="text-sm text-slate-500 line-clamp-3">Informasi resmi dari Badan Meteorologi, Klimatologi, dan Geofisika terkait aktivitas seismik terkini.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-brand-dark text-slate-400 py-8 text-center mt-auto">
+        <p class="text-sm">© 2026 VeritasLens. Dibangun untuk tujuan edukasi dan verifikasi. Selalu kroscek informasi dari sumber resmi.</p>
+    </footer>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-5 right-5 bg-slate-800 text-white px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3 z-50">
+        <i data-lucide="check-circle" class="w-5 h-5 text-green-400"></i>
+        <span id="toastMsg" class="font-medium"></span>
+    </div>
+
+    <!-- Script Logic -->
+    <script>
+        // Initialize Lucide Icons
+        lucide.createIcons();
+
+        // Constants & DOM Elements
+        const DOM = {
+            input: document.getElementById('claimInput'),
+            imageInput: document.getElementById('imageInput'),
+            imageDropZone: document.getElementById('imageDropZone'),
+            imagePreviewContainer: document.getElementById('imagePreviewContainer'),
+            imagePreview: document.getElementById('imagePreview'),
+            btn: document.getElementById('checkBtn'),
+            loading: document.getElementById('loadingState'),
+            result: document.getElementById('resultState'),
+            badge: document.getElementById('verdictBadge'),
+            summary: document.getElementById('verdictSummary'),
+            scoreText: document.getElementById('scoreText'),
+            scoreBar: document.getElementById('scoreBar'),
+            points: document.getElementById('keyPointsList'),
+            sources: document.getElementById('sourcesList'),
+            historyBox: document.getElementById('historyContainer'),
+            emptyHistory: document.getElementById('emptyHistoryMsg'),
+            toast: document.getElementById('toast'),
+            toastMsg: document.getElementById('toastMsg')
+        };
+
+        // State
+        let currentResult = null;
+        let history = JSON.parse(localStorage.getItem('cekfakta_history')) || [];
+        let selectedImageBase64 = null;
+
+        // API Key (Otomatis disediakan oleh environment)
+        const apiKey = "";
+
+        // Initialization
+        renderHistory();
+        setupImageUpload();
+
+        // --- IMAGE UPLOAD LOGIC ---
+
+        function setupImageUpload() {
+            DOM.imageInput.addEventListener('change', function(e) {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                if (file.size > 5 * 1024 * 1024) { // 5MB limit
+                    showToast("Ukuran gambar terlalu besar (maks. 5MB).", "error");
+                    this.value = ''; // Clear input
+                    return;
+                }
+
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    selectedImageBase64 = event.target.result.split(',')[1]; // Get base64 data only
+                    DOM.imagePreview.src = event.target.result;
+                    DOM.imagePreviewContainer.classList.remove('hidden');
+                    DOM.imageDropZone.classList.add('hidden');
+                };
+                reader.readAsDataURL(file);
+            });
+
+            // Drag and drop support (optional enhancement)
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                DOM.imageDropZone.addEventListener(eventName, preventDefaults, false);
+            });
+
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+
+            DOM.imageDropZone.addEventListener('drop', handleDrop, false);
+
+            function handleDrop(e) {
+                const dt = e.dataTransfer;
+                const files = dt.files;
+                DOM.imageInput.files = files;
+                DOM.imageInput.dispatchEvent(new Event('change'));
+            }
+        }
+
+        function clearImage() {
+            selectedImageBase64 = null;
+            DOM.imageInput.value = '';
+            DOM.imagePreview.src = '';
+            DOM.imagePreviewContainer.classList.add('hidden');
+            DOM.imageDropZone.classList.remove('hidden');
+        }
+
+        // --- CORE LOGIC ---
+
+        async function processFactCheck() {
+            const text = DOM.input.value.trim();
+            
+            if (!text && !selectedImageBase64) {
+                showToast("Silakan masukkan teks atau unggah gambar untuk dianalisis!", "error");
+                return;
+            }
+            
+            if (text && text.length < 15 && !selectedImageBase64) {
+                showToast("Teks terlalu pendek. Masukkan kalimat yang lebih lengkap atau tambahkan gambar.", "error");
+                return;
+            }
+
+            // UI Changes: Show loading
+            DOM.result.classList.add('hidden');
+            DOM.loading.classList.remove('hidden');
+            DOM.btn.disabled = true;
+            DOM.btn.innerHTML = '<div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> Menganalisis...';
+
+            try {
+                // Memanggil Gemini API
+                const apiResult = await analyzeWithGemini(text, selectedImageBase64);
+                
+                // Memetakan hasil JSON ke format UI (warna & ikon)
+                let colorClass = {};
+                if (apiResult.verdict === "HOAKS") {
+                    colorClass = { bg: "bg-red-100", text: "text-red-700", border: "border-red-200", bar: "bg-red-500", icon: "❌" };
+                } else if (apiResult.verdict === "BENAR") {
+                    colorClass = { bg: "bg-green-100", text: "text-green-700", border: "border-green-200", bar: "bg-green-500", icon: "✅" };
+                } else {
+                    colorClass = { bg: "bg-yellow-100", text: "text-yellow-700", border: "border-yellow-200", bar: "bg-yellow-500", icon: "⚠️" };
+                }
+
+                // Create a query label for history
+                let queryLabel = text ? text.substring(0, 60) + (text.length > 60 ? "..." : "") : "Analisis Gambar";
+                if (text && selectedImageBase64) queryLabel = "Analisis Teks & Gambar: " + queryLabel;
+
+                const finalResult = {
+                    query: text || "Analisis Gambar",
+                    queryLabel: queryLabel,
+                    verdict: apiResult.verdict,
+                    colorClass: colorClass,
+                    score: apiResult.score,
+                    summary: apiResult.summary,
+                    points: apiResult.points,
+                    sources: apiResult.sources
+                };
+
+                currentResult = finalResult;
+                displayResult(finalResult);
+                saveToHistory(finalResult);
+
+            } catch (error) {
+                console.error("API Error:", error);
+                showToast("Terjadi kesalahan saat menghubungi server AI. Silakan coba lagi.", "error");
+                
+                // Revert UI jika terjadi error
+                DOM.loading.classList.add('hidden');
+                DOM.btn.disabled = false;
+                DOM.btn.innerHTML = '<i data-lucide="search" class="w-4 h-4"></i> Analisis Sekarang';
+                lucide.createIcons();
+            }
+        }
+
+        async function fetchWithRetry(url, options, maxRetries = 3) {
+            let retries = 0;
+            const delays = [1000, 2000, 4000]; // Exponential backoff dalam ms
+
+            while (retries < maxRetries) {
+                try {
+                    const response = await fetch(url, options);
+                    if (!response.ok) {
+                        const errorBody = await response.text();
+                        throw new Error(`HTTP error! status: ${response.status}, body: ${errorBody}`);
+                    }
+                    return await response.json();
+                } catch (error) {
+                    retries++;
+                    if (retries >= maxRetries) {
+                        throw error;
+                    }
+                    console.warn(`Retry ${retries}/${maxRetries} after error: ${error.message}`);
+                    await new Promise(resolve => setTimeout(resolve, delays[retries - 1]));
+                }
+            }
+        }
+
+        async function analyzeWithGemini(text, imageBase64) {
+            // Use the gemini-2.5-flash-preview-09-2025 model which supports multimodal input (text + image)
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+            
+            const promptText = text 
+                ? `Analisis klaim atau konten berikut dan tentukan kebenarannya secara objektif berdasarkan informasi paling mutakhir saat ini. \n\nKlaim/Teks: "${text}"`
+                : `Analisis konten gambar yang diberikan. Identifikasi klaim utama atau informasi visual di dalamnya, lalu tentukan kebenarannya secara objektif berdasarkan informasi paling mutakhir saat ini.`;
+
+            const parts = [{ text: promptText }];
+            
+            if (imageBase64) {
+                parts.push({
+                    inlineData: {
+                        mimeType: "image/jpeg", // Assuming JPEG for simplicity, API handles others too
+                        data: imageBase64
+                    }
+                });
+            }
+
+            const payload = {
+                contents: [{ parts: parts }],
+                systemInstruction: {
+                    parts: [{ text: "Kamu adalah 'VeritasLens', sistem analis kebenaran konten (teks dan visual) berbahasa Indonesia yang cerdas dan akurat. Gunakan pengetahuanmu dan fitur pencarian internet (Google Search) untuk memverifikasi klaim atau informasi dalam teks dan/atau gambar yang diberikan dengan data paling baru (termasuk tahun 2026 ke atas). Klasifikasikan sebagai BENAR, HOAKS, atau MENYESATKAN. Analisis juga elemen visual jika ada gambar (misal: tanda-tanda editan, konteks gambar asli). Berikan alasan logis berdasarkan fakta nyata, dan berikan tautan URL referensi yang valid dari hasil pencarianmu." }]
+                },
+                tools: [{ "google_search": {} }], // Mengaktifkan pencarian internet real-time (Search Grounding)
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: "OBJECT",
+                        properties: {
+                            verdict: { type: "STRING", enum: ["BENAR", "HOAKS", "MENYESATKAN"] },
+                            score: { type: "INTEGER", description: "Skor kepercayaan AI dari 0 hingga 100" },
+                            summary: { type: "STRING", description: "Ringkasan penjelasan singkat 2-3 kalimat mengapa konten tersebut dinilai demikian. Jika ada gambar, sebutkan juga analisis visualnya." },
+                            points: { 
+                                type: "ARRAY", 
+                                items: { type: "STRING" }, 
+                                description: "3 hingga 5 poin argumen, bukti, analisis visual (jika ada gambar), atau alasan utama" 
+                            },
+                            sources: {
+                                type: "ARRAY",
+                                items: {
+                                    type: "OBJECT",
+                                    properties: {
+                                        title: { type: "STRING", description: "Judul artikel, rilis media, atau sumber referensi" },
+                                        url: { type: "STRING", description: "Tautan URL referensi. Jika tidak ada gunakan '#'" }
+                                    }
+                                },
+                                description: "Daftar 3 sumber referensi terkait"
+                            }
+                        },
+                        required: ["verdict", "score", "summary", "points", "sources"]
+                    }
+                }
+            };
+
+            const result = await fetchWithRetry(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            const rawText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (!rawText) throw new Error("Format respons tidak valid dari API Gemini");
+            
+            return JSON.parse(rawText);
+        }
+
+        // --- UI UPDATERS ---
+
+        function displayResult(res) {
+            // Hide loading
+            DOM.loading.classList.add('hidden');
+            DOM.btn.disabled = false;
+            DOM.btn.innerHTML = '<i data-lucide="search" class="w-4 h-4"></i> Analisis Lagi';
+            lucide.createIcons(); // re-init icon inside button
+
+            // Show Result
+            DOM.result.classList.remove('hidden');
+
+            // Update Badge
+            DOM.badge.className = `inline-flex items-center gap-2 px-6 py-2 rounded-full text-lg font-bold uppercase tracking-wider mb-4 border ${res.colorClass.bg} ${res.colorClass.text} ${res.colorClass.border}`;
+            DOM.badge.innerHTML = `<span>${res.colorClass.icon}</span> ${res.verdict}`;
+
+            // Update Summary
+            DOM.summary.textContent = res.summary;
+
+            // Update Score (Animate)
+            DOM.scoreText.textContent = `${res.score}%`;
+            DOM.scoreText.className = `font-bold text-xl ${res.colorClass.text}`;
+            DOM.scoreBar.className = `h-3 rounded-full transition-all duration-1000 ease-out ${res.colorClass.bar}`;
+            
+            // Trigger animation slightly after render
+            setTimeout(() => {
+                DOM.scoreBar.style.width = `${res.score}%`;
+            }, 50);
+
+            // Update Points
+            DOM.points.innerHTML = res.points.map(p => 
+                `<li class="flex items-start gap-2">
+                    <span class="${res.colorClass.text} mt-0.5">•</span>
+                    <span>${p}</span>
+                </li>`
+            ).join('');
+
+            // Update Sources
+            DOM.sources.innerHTML = res.sources.map(s => 
+                `<li>
+                    <a href="${s.url}" target="_blank" rel="noopener" class="text-sm text-brand-accent hover:underline flex items-center gap-2 bg-slate-50 p-2 rounded-lg border border-slate-100 transition-colors hover:bg-slate-100">
+                        <i data-lucide="external-link" class="w-3.5 h-3.5 flex-shrink-0"></i>
+                        <span class="truncate">${s.title}</span>
+                    </a>
+                </li>`
+            ).join('');
+
+            lucide.createIcons(); // re-init new icons
+            
+            // Scroll to result smoothly
+            DOM.result.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        function resetApp() {
+            DOM.input.value = '';
+            clearImage();
+            DOM.result.classList.add('hidden');
+            DOM.loading.classList.add('hidden');
+            DOM.scoreBar.style.width = '0%';
+            DOM.btn.innerHTML = '<i data-lucide="search" class="w-4 h-4"></i> Analisis Sekarang';
+            lucide.createIcons();
+            currentResult = null;
+        }
+
+        function loadExample(text) {
+            resetApp();
+            DOM.input.value = text;
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function shareResult() {
+            if (!currentResult) return;
+            
+            const shareText = `*Hasil Analisis VeritasLens*\n\nKonten: "${currentResult.query.substring(0, 50)}..."\nKesimpulan: ${currentResult.colorClass.icon} *${currentResult.verdict}* (Kepercayaan: ${currentResult.score}%)\n\nRingkasan: ${currentResult.summary}\n\nVerifikasi informasi mu di VeritasLens.`;
+            
+            navigator.clipboard.writeText(shareText).then(() => {
+                showToast("Hasil disalin ke clipboard!", "success");
+            }).catch(err => {
+                // Fallback for older browsers or iframe restrictions
+                const textArea = document.createElement("textarea");
+                textArea.value = shareText;
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                try {
+                    document.execCommand('copy');
+                    showToast("Hasil disalin ke clipboard!", "success");
+                } catch (err) {
+                    showToast("Gagal menyalin.", "error");
+                }
+                document.body.removeChild(textArea);
+            });
+        }
+
+        function showToast(message, type = "success") {
+            DOM.toastMsg.textContent = message;
+            DOM.toast.className = `fixed bottom-5 right-5 px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3 z-50 transition-all duration-300 transform translate-y-0 opacity-100 ${type === 'error' ? 'bg-red-800 text-white' : 'bg-slate-800 text-white'}`;
+            
+            // Swap icon based on type
+            const iconHTML = type === 'error' 
+                ? '<i data-lucide="alert-circle" class="w-5 h-5 text-red-400"></i>'
+                : '<i data-lucide="check-circle" class="w-5 h-5 text-green-400"></i>';
+            
+            DOM.toast.innerHTML = `${iconHTML} <span class="font-medium">${message}</span>`;
+            lucide.createIcons();
+
+            setTimeout(() => {
+                DOM.toast.classList.remove('translate-y-0', 'opacity-100');
+                DOM.toast.classList.add('translate-y-full', 'opacity-0');
+            }, 3000);
+        }
+
+        // --- HISTORY LOGIC ---
+
+        function saveToHistory(result) {
+            const historyItem = {
+                id: Date.now(),
+                query: result.query,
+                queryLabel: result.queryLabel,
+                verdict: result.verdict,
+                colorBg: result.colorClass.bg,
+                colorText: result.colorClass.text,
+                date: new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute:'2-digit' })
+            };
+
+            history.unshift(historyItem);
+            // Keep only last 5
+            if (history.length > 5) history.pop();
+            
+            localStorage.setItem('cekfakta_history', JSON.stringify(history));
+            renderHistory();
+        }
+
+        function renderHistory() {
+            if (history.length === 0) {
+                DOM.emptyHistory.classList.remove('hidden');
+                DOM.historyBox.innerHTML = '';
+                DOM.historyBox.appendChild(DOM.emptyHistory);
+                return;
+            }
+
+            DOM.emptyHistory.classList.add('hidden');
+            DOM.historyBox.innerHTML = history.map(item => `
+                <div class="p-3 bg-slate-50 rounded-lg border border-slate-100 hover:border-slate-300 transition-colors text-sm cursor-pointer" onclick="loadExample('${item.query.replace(/'/g, "\\'")}')">
+                    <div class="flex justify-between items-start mb-1">
+                        <span class="text-xs text-slate-500">${item.date}</span>
+                        <span class="text-[10px] font-bold px-2 py-0.5 rounded ${item.colorBg} ${item.colorText}">${item.verdict}</span>
+                    </div>
+                    <p class="text-slate-700 font-medium line-clamp-2" title="${item.queryLabel}">${item.queryLabel}</p>
+                </div>
+            `).join('');
+        }
+
+        function clearHistory() {
+            if(confirm("Apakah Anda yakin ingin menghapus semua riwayat analisis?")) {
+                history = [];
+                localStorage.removeItem('cekfakta_history');
+                renderHistory();
+                showToast("Riwayat berhasil dihapus.");
+            }
+        }
+
+    </script>
+</body>
+</html>
