@@ -6,6 +6,12 @@
     <title>VeritasLens - Analisis Kebenaran Berbasis AI</title>
     <link rel="icon" type="image/png" href="favicon.png">
     
+    <!-- Vercel Web Analytics -->
+    <script>
+        window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
+    </script>
+    <script defer src="/_vercel/insights/script.js"></script>
+    
     <!-- Script Tema: Diletakkan di awal agar tidak ada "flash" putih saat muat halaman di mode gelap -->
     <script>
         if (localStorage.getItem('theme') === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
